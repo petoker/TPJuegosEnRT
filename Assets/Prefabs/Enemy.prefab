@@ -186,6 +186,8 @@ MonoBehaviour:
   OnDeath:
     m_PersistentCalls:
       m_Calls: []
+  deathShakeIntensity: 0
+  deathShakeDuration: 0
 --- !u!114 &6109395226272240227
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -202,6 +204,8 @@ MonoBehaviour:
   firePoint: {fileID: 483069419016247952}
   fireForce: 20
   fireRate: 0.5
+  shakeIntensity: 0
+  shakeDuration: 0
 --- !u!114 &1610646829057541771
 MonoBehaviour:
   m_ObjectHideFlags: 0
