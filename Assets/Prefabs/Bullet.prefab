@@ -1,4 +1,4 @@
-%YAML 1.1
+﻿%YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
 --- !u!1 &4312524256278804125
 GameObject:
@@ -30,8 +30,8 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 1.66, y: 0, z: 0}
-  m_LocalScale: {x: 0.24, y: 0.24, z: 0.24}
-  m_ConstrainProportionsScale: 1
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -82,9 +82,9 @@ SpriteRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingOrder: 2
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -2413806693520163455, guid: a86470a33a6bf42c4b3595704624658b, type: 3}
+  m_Sprite: {fileID: -3296362929794034626, guid: 67a5a93a7bd80784a99d82938bc65cdf, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -129,7 +129,7 @@ CircleCollider2D:
   m_CompositeOperation: 0
   m_CompositeOrder: 0
   m_Offset: {x: 0, y: 0}
-  m_Radius: 0.5
+  m_Radius: 0.2
 --- !u!50 &6080914154303082132
 Rigidbody2D:
   serializedVersion: 5
@@ -171,3 +171,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Projectile
   damage: 1
   lifetime: 2
+  spriteRenderer: {fileID: 3835278704797731213}
+  animationSprites:
+  - {fileID: -3296362929794034626, guid: 67a5a93a7bd80784a99d82938bc65cdf, type: 3}
+  - {fileID: 7554319563551622173, guid: 67a5a93a7bd80784a99d82938bc65cdf, type: 3}
+  - {fileID: 629617002330759104, guid: 67a5a93a7bd80784a99d82938bc65cdf, type: 3}
+  - {fileID: -1736116023, guid: 67a5a93a7bd80784a99d82938bc65cdf, type: 3}
+  - {fileID: 406938040, guid: 67a5a93a7bd80784a99d82938bc65cdf, type: 3}
+  animationFps: 20
+  loopAnimation: 1
