@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 public class Projectile : MonoBehaviour
 {
@@ -50,6 +50,9 @@ public class Projectile : MonoBehaviour
 
     void OnTriggerEnter2D(Collider2D hitInfo)
     {
+        // Ignorar triggers (como el cono de visión del enemigo) para que las balas no choquen con la luz
+        if (hitInfo.isTrigger) return;
+
         HandleHit(hitInfo.gameObject);
     }
 

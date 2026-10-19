@@ -1,30 +1,32 @@
-﻿using System.Collections;
+using System.Collections;
 using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody2D))]
 public class EnemyAI : MonoBehaviour
 {
-    [Header("Objetivo y Movimiento")]
-    public Transform target; // El jugador
+    [Header("Patrulla (Ida y Vuelta)")]
+    [Tooltip("Puedes arrastrar 1 o varios GameObjects vacíos como puntos de ruta")]
+    public Transform[] waypoints;
     public float moveSpeed = 3f;
-    public float stoppingDistance = 5f; // Distancia para empezar a disparar
 
-    [Header("AnimaciÃ³n")]
+    [Header("Cono de Visión (Linterna)")]
+    [Tooltip("Objeto hijo que tiene el Sprite amarillo y un Collider2D con 'Is Trigger' activado")]
+    public GameObject visionCone;
+    public Transform target; // El jugador
+
+    [Header("Animación")]
     public SpriteRenderer spriteRenderer;
     public Animator animator;
-    public Sprite idleSprite;
-    public Sprite[] walkSprites;
-    public float animationFps = 12f;
 
-    [Header("Efectos de DaÃ±o y Muerte")]
-    [Tooltip("Sprite del cuerpo caÃ­do cuando muere")]
+    [Header("Efectos de Daño y Muerte")]
+    [Tooltip("Sprite del cuerpo caído cuando muere")]
     public Sprite deadSprite;
-    [Tooltip("Sprites de la animaciÃ³n al recibir impacto/daÃ±o")]
+    [Tooltip("Sprites de la animación al recibir impacto/daño")]
     public Sprite[] hitSprites;
-    [Tooltip("DuraciÃ³n de la animaciÃ³n de impacto en segundos")]
+    [Tooltip("Duración de la animación de impacto en segundos")]
     public float hitDuration = 0.2f;
 
-    [Header("Ajustes de RotaciÃ³n")]
+    [Header("Ajustes de Rotación")]
     [Tooltip("Offset angular en grados si el sprite original mira hacia abajo (por defecto 90)")]
     public float rotationOffset = 90f;
 
@@ -32,9 +34,15 @@ public class EnemyAI : MonoBehaviour
     private Weapon weapon;
     private Health health;
     private Vector2 moveVelocity;
-    private float animTimer;
     private bool isDead;
     private bool isHitPlaying;
+
+    // Variables simples para la patrulla y la visión
+    private Vector2 startPosition;
+    private int currentWaypointIndex = 0;
+    private int patrolDirection = 1; // 1 = ida, -1 = vuelta
+    private bool goingBackToStart = false; // Se usa cuando solo hay 1 punto asignado
+    private bool playerInSight = false;
 
     void Awake()
     {
@@ -51,6 +59,19 @@ public class EnemyAI : MonoBehaviour
             animator = GetComponent<Animator>();
         }
 
+        // Auto-detectar el cono de visión si es un hijo con Collider2D en modo Trigger
+        if (visionCone == null)
+        {
+            foreach (Collider2D col in GetComponentsInChildren<Collider2D>())
+            {
+                if (col.gameObject != gameObject && col.isTrigger)
+                {
+                    visionCone = col.gameObject;
+                    break;
+                }
+            }
+        }
+
         if (health != null)
         {
             health.OnDamaged.AddListener(OnDamaged);
@@ -60,6 +81,9 @@ public class EnemyAI : MonoBehaviour
 
     void Start()
     {
+        // Guardamos la posición inicial por si solo le pones 1 GameObject para ir y volver
+        startPosition = transform.position;
+
         if (target == null)
         {
             GameObject player = GameObject.FindGameObjectWithTag("Player");
@@ -72,52 +96,114 @@ public class EnemyAI : MonoBehaviour
     {
         if (isDead) return;
 
-        if (target == null)
+        // 1. Si el jugador está dentro del cono de visión -> Se frena, lo apunta y dispara
+        if (playerInSight && target != null)
+        {
+            moveVelocity = Vector2.zero;
+            UpdateAnimation(false);
+
+            // Mirar hacia el jugador
+            Vector2 dirToPlayer = (Vector2)target.position - rb.position;
+            RotateTowards(dirToPlayer);
+
+            // Disparar
+            if (weapon != null && !isHitPlaying)
+            {
+                weapon.Shoot();
+            }
+        }
+        // 2. Si NO ve al jugador -> Patrulla de ida y vuelta entre los puntos
+        else
+        {
+            Patrol();
+        }
+    }
+
+    private void Patrol()
+    {
+        // Si no tiene puntos asignados, se queda quieto
+        if (waypoints == null || waypoints.Length == 0 || waypoints[0] == null)
         {
             moveVelocity = Vector2.zero;
             UpdateAnimation(false);
             return;
         }
 
-        Vector2 toTarget = (Vector2)target.position - rb.position;
-        float distance = toTarget.magnitude;
-
-        if (distance > stoppingDistance)
+        // Elegir hacia qué punto ir:
+        // - Si solo pusiste 1 GameObject, va desde su posición inicial hasta ese objeto y vuelve.
+        // - Si pusiste 2 o más GameObjects, va recorriéndolos en orden de ida y vuelta.
+        Vector2 targetPoint;
+        if (waypoints.Length == 1)
         {
-            // Se mueve hacia el jugador
-            Vector2 moveDir = toTarget.normalized;
-            moveVelocity = moveDir * moveSpeed;
-
-            // Si no se estÃ¡ reproduciendo el impacto, mirar hacia la direcciÃ³n de movimiento
-            if (!isHitPlaying)
-            {
-                float moveAngle = Mathf.Atan2(moveDir.y, moveDir.x) * Mathf.Rad2Deg + rotationOffset;
-                transform.rotation = Quaternion.Euler(0, 0, moveAngle);
-            }
-
-            // Animar ciclo de caminata
-            UpdateAnimation(true);
+            targetPoint = goingBackToStart ? startPosition : (Vector2)waypoints[0].position;
         }
         else
         {
-            // Detenido dentro del rango de disparo
-            moveVelocity = Vector2.zero;
+            targetPoint = waypoints[currentWaypointIndex].position;
+        }
 
-            // Mirar hacia el jugador para apuntar
-            if (!isHitPlaying && distance > 0.0001f)
+        Vector2 toPoint = targetPoint - rb.position;
+        float distance = toPoint.magnitude;
+
+        // Si ya llegó al punto (distancia muy corta), cambia al siguiente punto
+        if (distance < 0.15f)
+        {
+            if (waypoints.Length == 1)
             {
-                float aimAngle = Mathf.Atan2(toTarget.y, toTarget.x) * Mathf.Rad2Deg + rotationOffset;
-                transform.rotation = Quaternion.Euler(0, 0, aimAngle);
+                goingBackToStart = !goingBackToStart;
             }
-
-            // Sprite quieto (idle)
-            UpdateAnimation(false);
-
-            // Disparar si tiene un arma
-            if (weapon != null && !isHitPlaying)
+            else
             {
-                weapon.Shoot();
+                currentWaypointIndex += patrolDirection;
+
+                // Si llegó al último punto o volvió al primero, invierte la dirección (ida y vuelta)
+                if (currentWaypointIndex >= waypoints.Length - 1)
+                {
+                    currentWaypointIndex = waypoints.Length - 1;
+                    patrolDirection = -1;
+                }
+                else if (currentWaypointIndex <= 0)
+                {
+                    currentWaypointIndex = 0;
+                    patrolDirection = 1;
+                }
             }
+        }
+        else
+        {
+            // Moverse hacia el punto actual
+            Vector2 moveDir = toPoint.normalized;
+            moveVelocity = moveDir * moveSpeed;
+            RotateTowards(moveDir);
+            UpdateAnimation(true);
+        }
+    }
+
+    private void RotateTowards(Vector2 direction)
+    {
+        if (!isHitPlaying && direction.sqrMagnitude > 0.0001f)
+        {
+            float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg + rotationOffset;
+            transform.rotation = Quaternion.Euler(0, 0, angle);
+        }
+    }
+
+    // Se activa automáticamente cuando el jugador entra al Collider2D (Is Trigger) del Cono de Visión
+    void OnTriggerEnter2D(Collider2D other)
+    {
+        if (other.CompareTag("Player"))
+        {
+            playerInSight = true;
+            target = other.transform;
+        }
+    }
+
+    // Se activa cuando el jugador sale del Cono de Visión
+    void OnTriggerExit2D(Collider2D other)
+    {
+        if (other.CompareTag("Player"))
+        {
+            playerInSight = false;
         }
     }
 
@@ -129,30 +215,13 @@ public class EnemyAI : MonoBehaviour
         {
             animator.SetBool("isMoving", isMoving);
         }
-
-        if (spriteRenderer == null) return;
-
-        if (isMoving && walkSprites != null && walkSprites.Length > 0)
-        {
-            animTimer += Time.deltaTime * animationFps;
-            int frame = (int)animTimer % walkSprites.Length;
-            spriteRenderer.sprite = walkSprites[frame];
-        }
-        else
-        {
-            if (idleSprite != null)
-            {
-                spriteRenderer.sprite = idleSprite;
-            }
-            animTimer = 0f;
-        }
     }
 
     private void OnDamaged()
     {
         if (isDead) return;
 
-        // Si aÃºn tiene vida tras el golpe, reproduce impacto
+        // Si aún tiene vida tras el golpe, reproduce impacto
         if (health != null && health.CurrentHealth > 0)
         {
             StartCoroutine(PlayHitCoroutine());
@@ -198,8 +267,9 @@ public class EnemyAI : MonoBehaviour
 
     private IEnumerator PlayDeathCoroutine()
     {
-        // 1. Inmovilizar y desactivar interacciones
+        // 1. Inmovilizar, apagar linterna y desactivar interacciones
         if (weapon != null) weapon.enabled = false;
+        if (visionCone != null) visionCone.SetActive(false);
 
         Collider2D col = GetComponent<Collider2D>();
         if (col != null) col.enabled = false;
@@ -212,7 +282,7 @@ public class EnemyAI : MonoBehaviour
 
         if (animator != null) animator.enabled = false;
 
-        // 2. Reproducir animaciÃ³n de impacto mortal (daÃ±o)
+        // 2. Reproducir animación de impacto mortal (daño)
         if (hitSprites != null && hitSprites.Length > 0 && spriteRenderer != null)
         {
             float frameTime = hitDuration / hitSprites.Length;
@@ -234,7 +304,7 @@ public class EnemyAI : MonoBehaviour
             spriteRenderer.sortingOrder = 0; // Al ras del suelo
         }
 
-        // 4. Desactivar el script AI para que no procese mÃ¡s lÃ³gica
+        // 4. Desactivar el script AI para que no procese más lógica
         enabled = false;
     }
 
